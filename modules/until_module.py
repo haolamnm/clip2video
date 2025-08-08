@@ -24,22 +24,25 @@ from .until_config import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
+
 def gelu(x):
     """Implementation of the gelu activation function.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+    0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
 
 def swish(x):
     return x * torch.sigmoid(x)
 
+
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
+
 
 class LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-12):
-        """Construct a layernorm module in the TF style (epsilon inside the square root).
-        """
+        """Construct a layernorm module in the TF style (epsilon inside the square root)."""
         super(LayerNorm, self).__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.bias = nn.Parameter(torch.zeros(hidden_size))
@@ -51,10 +54,12 @@ class LayerNorm(nn.Module):
         x = (x - u) / torch.sqrt(s + self.variance_epsilon)
         return self.weight * x + self.bias
 
+
 class PreTrainedModel(nn.Module):
-    """ An abstract class to handle weights initialization and
-        a simple interface for dowloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for dowloading and loading pretrained models.
     """
+
     def __init__(self, config, *inputs, **kwargs):
         super(PreTrainedModel, self).__init__()
         if not isinstance(config, PretrainedConfig):
@@ -63,18 +68,18 @@ class PreTrainedModel(nn.Module):
                 "To create a model from a Google pretrained model use "
                 "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
                     self.__class__.__name__, self.__class__.__name__
-                ))
+                )
+            )
         self.config = config
 
     def init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, LayerNorm):
-            if 'beta' in dir(module) and 'gamma' in dir(module):
+            if "beta" in dir(module) and "gamma" in dir(module):
                 module.beta.data.zero_()
                 module.gamma.data.fill_(1.0)
             else:
@@ -92,10 +97,10 @@ class PreTrainedModel(nn.Module):
         new_keys = []
         for key in state_dict.keys():
             new_key = None
-            if 'gamma' in key:
-                new_key = key.replace('gamma', 'weight')
-            if 'beta' in key:
-                new_key = key.replace('beta', 'bias')
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
             if new_key:
                 old_keys.append(key)
                 new_keys.append(new_key)
@@ -115,32 +120,49 @@ class PreTrainedModel(nn.Module):
         unexpected_keys = []
         error_msgs = []
         # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
+        metadata = getattr(state_dict, "_metadata", None)
         state_dict = state_dict.copy()
         if metadata is not None:
             state_dict._metadata = metadata
 
-        def load(module, prefix=''):
+        def load(module, prefix=""):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
             module._load_from_state_dict(
-                state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                state_dict,
+                prefix,
+                local_metadata,
+                True,
+                missing_keys,
+                unexpected_keys,
+                error_msgs,
+            )
             for name, child in module._modules.items():
                 if child is not None:
-                    load(child, prefix + name + '.')
+                    load(child, prefix + name + ".")
 
-        load(model, prefix='')
+        load(model, prefix="")
 
         if prefix is None and (task_config is None or task_config.local_rank == 0):
             logger.info("-" * 20)
             if len(missing_keys) > 0:
-                logger.info("Weights of {} not initialized from pretrained model: {}"
-                            .format(model.__class__.__name__, "\n   " + "\n   ".join(missing_keys)))
+                logger.info(
+                    "Weights of {} not initialized from pretrained model: {}".format(
+                        model.__class__.__name__, "\n   " + "\n   ".join(missing_keys)
+                    )
+                )
             if len(unexpected_keys) > 0:
-                logger.info("Weights from pretrained model not used in {}: {}"
-                            .format(model.__class__.__name__, "\n   " + "\n   ".join(unexpected_keys)))
+                logger.info(
+                    "Weights from pretrained model not used in {}: {}".format(
+                        model.__class__.__name__,
+                        "\n   " + "\n   ".join(unexpected_keys),
+                    )
+                )
             if len(error_msgs) > 0:
-                logger.error("Weights from pretrained model cause errors in {}: {}"
-                             .format(model.__class__.__name__, "\n   " + "\n   ".join(error_msgs)))
+                logger.error(
+                    "Weights from pretrained model cause errors in {}: {}".format(
+                        model.__class__.__name__, "\n   " + "\n   ".join(error_msgs)
+                    )
+                )
 
         return model
 
@@ -154,7 +176,9 @@ class PreTrainedModel(nn.Module):
         except StopIteration:
             # For nn.DataParallel compatibility in PyTorch 1.5
             def find_tensor_attributes(module: nn.Module):
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                tuples = [
+                    (k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)
+                ]
                 return tuples
 
             gen = self._named_members(get_members_fn=find_tensor_attributes)
@@ -162,7 +186,7 @@ class PreTrainedModel(nn.Module):
             return first_tuple[1].dtype
 
     @classmethod
-    def from_pretrained(cls, config, state_dict=None,  *inputs, **kwargs):
+    def from_pretrained(cls, config, state_dict=None, *inputs, **kwargs):
         """
         Instantiate a PreTrainedModel from a pre-trained model file or a pytorch state dict.
         Download and cache the pre-trained model file if needed.
@@ -175,9 +199,13 @@ class PreTrainedModel(nn.Module):
 
         return model
 
+
 class CrossEn(nn.Module):
     """cross entroy loss"""
-    def __init__(self,):
+
+    def __init__(
+        self,
+    ):
         super(CrossEn, self).__init__()
 
     def forward(self, sim_matrix):
@@ -186,6 +214,3 @@ class CrossEn(nn.Module):
         nce_loss = -logpt
         sim_loss = nce_loss.mean()
         return sim_loss
-
-
-

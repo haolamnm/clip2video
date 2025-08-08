@@ -1,4 +1,4 @@
-#coding:utf-8
+# coding:utf-8
 # @Time : 2021/6/19
 # @Author : Han Fang
 # @File: dataloader_msvd_frame.py
@@ -26,15 +26,15 @@ class MSVD_multi_sentence_dataLoader(Dataset):
     """
 
     def __init__(
-            self,
-            subset,
-            data_path,
-            features_path,
-            tokenizer,
-            max_words=30,
-            feature_framerate=1.0,
-            max_frames=100,
-            image_resolution=224,
+        self,
+        subset,
+        data_path,
+        features_path,
+        tokenizer,
+        max_words=30,
+        feature_framerate=1.0,
+        max_frames=100,
+        image_resolution=224,
     ):
         self.subset = subset
         self.data_path = data_path
@@ -44,7 +44,6 @@ class MSVD_multi_sentence_dataLoader(Dataset):
         self.max_frames = max_frames
         self.tokenizer = tokenizer
 
-
         # load the id of split list
         assert self.subset in ["train", "val", "test"]
         video_id_path_dict = {}
@@ -53,19 +52,20 @@ class MSVD_multi_sentence_dataLoader(Dataset):
         video_id_path_dict["test"] = os.path.join(self.data_path, "test_list.txt")
 
         # construct ids for data locader
-        with open(video_id_path_dict[self.subset], 'r') as fp:
+        with open(video_id_path_dict[self.subset], "r") as fp:
             video_ids = [itm.strip() for itm in fp.readlines()]
 
         # load caption
         caption_file = os.path.join(self.data_path, "raw-captions.pkl")
-        with open(caption_file, 'rb') as f:
+        with open(caption_file, "rb") as f:
             captions = pickle.load(f)
 
         # ensure the existing directory for training
         video_dict = {}
         for video_file in os.listdir(self.features_path):
             video_path = os.path.join(self.features_path, video_file)
-            if not os.path.isdir(video_path): continue
+            if not os.path.isdir(video_path):
+                continue
             if len(os.listdir(video_path)) > 5:
                 if video_file not in video_ids:
                     continue
@@ -75,7 +75,7 @@ class MSVD_multi_sentence_dataLoader(Dataset):
         # construct pairs
         self.sample_len = 0
         self.sentences_dict = {}
-        self.cut_off_points = [] # used to tag the label when calculate the metric
+        self.cut_off_points = []  # used to tag the label when calculate the metric
         for video_id in video_ids:
             assert video_id in captions
             for cap in captions[video_id]:
@@ -83,12 +83,15 @@ class MSVD_multi_sentence_dataLoader(Dataset):
                 self.sentences_dict[len(self.sentences_dict)] = (video_id, cap_txt)
             self.cut_off_points.append(len(self.sentences_dict))
 
-
         # usd for multi-sentence retrieval
-        self.multi_sentence_per_video = True    # important tag for eval in multi-sentence retrieval
+        self.multi_sentence_per_video = (
+            True  # important tag for eval in multi-sentence retrieval
+        )
         if self.subset == "val" or self.subset == "test":
-            self.sentence_num = len(self.sentences_dict) # used to cut the sentence representation
-            self.video_num = len(video_ids) # used to cut the video representation
+            self.sentence_num = len(
+                self.sentences_dict
+            )  # used to cut the sentence representation
+            self.video_num = len(video_ids)  # used to cut the video representation
             assert len(self.cut_off_points) == self.video_num
             print("For {}, sentence number: {}".format(self.subset, self.sentence_num))
             print("For {}, video number: {}".format(self.subset, self.video_num))
@@ -100,13 +103,18 @@ class MSVD_multi_sentence_dataLoader(Dataset):
         self.sample_len = len(self.sentences_dict)
 
         # frame extractor to sample frames from video
-        self.frameExtractor = RawFrameExtractor(framerate=feature_framerate, size=image_resolution, train=self.subset)
+        self.frameExtractor = RawFrameExtractor(
+            framerate=feature_framerate, size=image_resolution, train=self.subset
+        )
 
         # start and end token
-        self.SPECIAL_TOKEN = {"CLS_TOKEN": "<|startoftext|>", "SEP_TOKEN": "<|endoftext|>",
-                              "MASK_TOKEN": "[MASK]", "UNK_TOKEN": "[UNK]", "PAD_TOKEN": "[PAD]"}
-
-
+        self.SPECIAL_TOKEN = {
+            "CLS_TOKEN": "<|startoftext|>",
+            "SEP_TOKEN": "<|endoftext|>",
+            "MASK_TOKEN": "[MASK]",
+            "UNK_TOKEN": "[UNK]",
+            "PAD_TOKEN": "[PAD]",
+        }
 
     def __len__(self):
         """length of data loader
@@ -178,15 +186,24 @@ class MSVD_multi_sentence_dataLoader(Dataset):
         video_mask = np.zeros((1, self.max_frames), dtype=np.long)
 
         # 1 x L x 1 x 3 x H x W
-        video = np.zeros((1, self.max_frames, 1, 3,
-                          self.frameExtractor.size, self.frameExtractor.size), dtype=np.float)
+        video = np.zeros(
+            (
+                1,
+                self.max_frames,
+                1,
+                3,
+                self.frameExtractor.size,
+                self.frameExtractor.size,
+            ),
+            dtype=np.float,
+        )
 
         # video_path
         video_path = os.path.join(self.features_path, video_id)
 
         # get sampling frames
         raw_video_data = self.frameExtractor.get_video_data(video_path, self.max_frames)
-        raw_video_data = raw_video_data['video']
+        raw_video_data = raw_video_data["video"]
 
         # L x 1 x 3 x H x W
         if len(raw_video_data.shape) > 3:
@@ -196,7 +213,9 @@ class MSVD_multi_sentence_dataLoader(Dataset):
 
             # max_frames x 1 x 3 x H x W
             if self.max_frames < raw_video_slice.shape[0]:
-                sample_indx = np.linspace(0, raw_video_slice.shape[0] - 1, num=self.max_frames, dtype=int)
+                sample_indx = np.linspace(
+                    0, raw_video_slice.shape[0] - 1, num=self.max_frames, dtype=int
+                )
                 video_slice = raw_video_slice[sample_indx, ...]
             else:
                 video_slice = raw_video_slice
@@ -210,7 +229,6 @@ class MSVD_multi_sentence_dataLoader(Dataset):
             print("get raw video error, skip it.")
 
         return video, video_mask
-
 
     def __getitem__(self, idx):
         """forward method
@@ -229,7 +247,7 @@ class MSVD_multi_sentence_dataLoader(Dataset):
         # obtain text data
         pairs_text, pairs_mask, pairs_segment = self._get_text(caption)
 
-        #obtain video data
+        # obtain video data
         video, video_mask = self._get_rawvideo(video_id)
 
         return pairs_text, pairs_mask, pairs_segment, video, video_mask

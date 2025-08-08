@@ -1,4 +1,4 @@
-#coding:utf-8
+# coding:utf-8
 # @Time : 2021/6/19
 # @File: module_clip.py
 # @Version: version 1.0
@@ -19,10 +19,10 @@ _MODELS = {
     "ViT-B/32": "https://openaipublic.azureedge.net/clip/models/40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt",
 }
 
+
 def available_models():
     """Returns the names of available CLIP models"""
     return list(_MODELS.keys())
-
 
 
 class LayerNorm(nn.LayerNorm):
@@ -42,33 +42,41 @@ class QuickGELU(nn.Module):
 class ResidualAttentionBlock(nn.Module):
     """residual attention block used in transformer
 
-     Attributes:
-         attn: multi-head attention
-         ln_1: layer normalization
-         mlp: MLP
-         ln_2: layer normalization
-         attn_mask: attention mask
-     """
+    Attributes:
+        attn: multi-head attention
+        ln_1: layer normalization
+        mlp: MLP
+        ln_2: layer normalization
+        attn_mask: attention mask
+    """
 
     def __init__(self, d_model, n_head, attn_mask=None):
         super().__init__()
 
         self.attn = nn.MultiheadAttention(d_model, n_head)
         self.ln_1 = LayerNorm(d_model)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, d_model * 4)),
-            ("gelu", QuickGELU()),
-            ("c_proj", nn.Linear(d_model * 4, d_model))
-        ]))
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, d_model * 4)),
+                    ("gelu", QuickGELU()),
+                    ("c_proj", nn.Linear(d_model * 4, d_model)),
+                ]
+            )
+        )
         self.ln_2 = LayerNorm(d_model)
         self.attn_mask = attn_mask
 
     def attention(self, x):
         attn_mask_ = self.attn_mask
-        if self.attn_mask is not None and hasattr(self.attn_mask, '__call__'):
-            attn_mask_ = self.attn_mask(x.size(0))   # LND
+        if self.attn_mask is not None and hasattr(self.attn_mask, "__call__"):
+            attn_mask_ = self.attn_mask(x.size(0))  # LND
 
-        attn_mask_ = attn_mask_.to(dtype=x.dtype, device=x.device) if attn_mask_ is not None else None
+        attn_mask_ = (
+            attn_mask_.to(dtype=x.dtype, device=x.device)
+            if attn_mask_ is not None
+            else None
+        )
         return self.attn(x, x, x, need_weights=False, attn_mask=attn_mask_)[0]
 
     def forward(self, x_tuple):
@@ -87,11 +95,13 @@ class Transformer(nn.Module):
         resblocks: residual block
     """
 
-    def __init__(self, width, layers, heads, attn_mask = None):
+    def __init__(self, width, layers, heads, attn_mask=None):
         super().__init__()
         self.width = width
         self.layers = layers
-        self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
+        self.resblocks = nn.Sequential(
+            *[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)]
+        )
 
     def forward(self, x, video_frame=-1):
         return self.resblocks((x, video_frame))[0]
@@ -110,16 +120,23 @@ class VisualTransformer(nn.Module):
     """
 
     def __init__(self, input_resolution, patch_size, width, layers, heads, output_dim):
-
         super().__init__()
         self.input_resolution = input_resolution
         self.output_dim = output_dim
 
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
+        self.conv1 = nn.Conv2d(
+            in_channels=3,
+            out_channels=width,
+            kernel_size=patch_size,
+            stride=patch_size,
+            bias=False,
+        )
 
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
-        self.positional_embedding = nn.Parameter(scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width))
+        self.positional_embedding = nn.Parameter(
+            scale * torch.randn((input_resolution // patch_size) ** 2 + 1, width)
+        )
         self.ln_pre = LayerNorm(width)
 
         self.transformer = Transformer(width, layers, heads)
@@ -127,16 +144,21 @@ class VisualTransformer(nn.Module):
         self.ln_post = LayerNorm(width)
         self.proj = nn.Parameter(scale * torch.randn(width, output_dim))
 
-
     def forward(self, x, video_frame=-1):
-
         x = self.conv1(x)  # shape = [*, width, grid, grid]
 
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat(
-            [self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
-             x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+            [
+                self.class_embedding.to(x.dtype)
+                + torch.zeros(
+                    x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device
+                ),
+                x,
+            ],
+            dim=1,
+        )  # shape = [*, grid ** 2 + 1, width]
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
 
@@ -163,20 +185,22 @@ class CLIP(nn.Module):
         heads: head for multi-head attention
         output_dim: the final output of ViT
     """
-    def __init__(self,
-                 embed_dim,
-                 # vision
-                 image_resolution,
-                 vision_layers,
-                 vision_width,
-                 vision_patch_size,
-                 # text
-                 context_length,
-                 vocab_size,
-                 transformer_width,
-                 transformer_heads,
-                 transformer_layers,
-                 ):
+
+    def __init__(
+        self,
+        embed_dim,
+        # vision
+        image_resolution,
+        vision_layers,
+        vision_width,
+        vision_patch_size,
+        # text
+        context_length,
+        vocab_size,
+        transformer_width,
+        transformer_heads,
+        transformer_layers,
+    ):
         super().__init__()
 
         # the length of caption
@@ -190,7 +214,7 @@ class CLIP(nn.Module):
             width=vision_width,
             layers=vision_layers,
             heads=vision_heads,
-            output_dim=embed_dim
+            output_dim=embed_dim,
         )
 
         # set the text transformer
@@ -198,12 +222,14 @@ class CLIP(nn.Module):
             width=transformer_width,
             layers=transformer_layers,
             heads=transformer_heads,
-            attn_mask=self.build_attention_mask
+            attn_mask=self.build_attention_mask,
         )
 
         self.vocab_size = vocab_size
         self.token_embedding = nn.Embedding(vocab_size, transformer_width)
-        self.positional_embedding = nn.Parameter(torch.empty(self.context_length, transformer_width))
+        self.positional_embedding = nn.Parameter(
+            torch.empty(self.context_length, transformer_width)
+        )
         self.ln_final = LayerNorm(transformer_width)
 
         self.text_projection = nn.Parameter(torch.empty(transformer_width, embed_dim))
@@ -215,8 +241,10 @@ class CLIP(nn.Module):
         nn.init.normal_(self.token_embedding.weight, std=0.02)
         nn.init.normal_(self.positional_embedding, std=0.01)
 
-        proj_std = (self.transformer.width ** -0.5) * ((2 * self.transformer.layers) ** -0.5)
-        attn_std = self.transformer.width ** -0.5
+        proj_std = (self.transformer.width**-0.5) * (
+            (2 * self.transformer.layers) ** -0.5
+        )
+        attn_std = self.transformer.width**-0.5
         fc_std = (2 * self.transformer.width) ** -0.5
         for block in self.transformer.resblocks:
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
@@ -225,15 +253,18 @@ class CLIP(nn.Module):
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
         if self.text_projection is not None:
-            nn.init.normal_(self.text_projection, std=self.transformer.width ** -0.5)
+            nn.init.normal_(self.text_projection, std=self.transformer.width**-0.5)
 
     @staticmethod
-    def get_config(clip_path='/data/ceph_11015/ssd/howiefang/videoCLIP/CLIP2Clip/ViT-B-32.pt'):
-
+    def get_config(
+        clip_path="/data/ceph_11015/ssd/howiefang/videoCLIP/CLIP2Clip/ViT-B-32.pt",
+    ):
         if os.path.exists(clip_path):
             pass
         else:
-            raise RuntimeError(f"Model ViT-B/32 not found; available models = {available_models()}")
+            raise RuntimeError(
+                f"Model ViT-B/32 not found; available models = {available_models()}"
+            )
 
         try:
             # loading JIT archive
@@ -289,7 +320,7 @@ class CLIP(nn.Module):
         """
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
 
-        pos_emd = self.positional_embedding[:x.size(1), :].type(self.dtype)
+        pos_emd = self.positional_embedding[: x.size(1), :].type(self.dtype)
         x = x + pos_emd
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.transformer(x)
@@ -342,7 +373,12 @@ def convert_weights(model: nn.Module):
                 l.bias.data = l.bias.data.half()
 
         if isinstance(l, nn.MultiheadAttention):
-            for attr in [*[f"{s}_proj_weight" for s in ["in", "q", "k", "v"]], "in_proj_bias", "bias_k", "bias_v"]:
+            for attr in [
+                *[f"{s}_proj_weight" for s in ["in", "q", "k", "v"]],
+                "in_proj_bias",
+                "bias_k",
+                "bias_v",
+            ]:
                 tensor = getattr(l, attr)
                 if tensor is not None:
                     tensor.data = tensor.data.half()

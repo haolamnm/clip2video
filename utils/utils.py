@@ -6,6 +6,7 @@ import threading
 from torch._utils import ExceptionWrapper
 import logging
 
+
 def get_a_var(obj):
     if isinstance(obj, torch.Tensor):
         return obj
@@ -19,6 +20,7 @@ def get_a_var(obj):
             if isinstance(result, torch.Tensor):
                 return result
     return None
+
 
 def parallel_apply(fct, model, inputs, device_ids):
     modules = nn.parallel.replicate(model, device_ids)
@@ -40,11 +42,15 @@ def parallel_apply(fct, model, inputs, device_ids):
                 results[i] = output
         except Exception:
             with lock:
-                results[i] = ExceptionWrapper(where="in replica {} on device {}".format(i, device))
+                results[i] = ExceptionWrapper(
+                    where="in replica {} on device {}".format(i, device)
+                )
 
     if len(modules) > 1:
-        threads = [threading.Thread(target=_worker, args=(i, module, input))
-                   for i, (module, input) in enumerate(zip(modules, inputs))]
+        threads = [
+            threading.Thread(target=_worker, args=(i, module, input))
+            for i, (module, input) in enumerate(zip(modules, inputs))
+        ]
 
         for thread in threads:
             thread.start()
@@ -61,15 +67,20 @@ def parallel_apply(fct, model, inputs, device_ids):
         outputs.append(output)
     return outputs
 
+
 def get_logger(filename=None):
-    logger = logging.getLogger('logger')
+    logger = logging.getLogger("logger")
     logger.setLevel(logging.DEBUG)
-    logging.basicConfig(format='%(asctime)s - %(levelname)s -   %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
     if filename is not None:
         handler = logging.FileHandler(filename)
         handler.setLevel(logging.DEBUG)
-        handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s: %(message)s'))
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s:%(levelname)s: %(message)s")
+        )
         logging.getLogger().addHandler(handler)
     return logger

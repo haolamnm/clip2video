@@ -1,4 +1,4 @@
-#coding:utf-8
+# coding:utf-8
 # @Time : 2021/6/19
 # @Author : Han Fang
 # @File: dataloader_msrvttfull_frame.py
@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import json
 from dataloaders.rawframe_util import RawFrameExtractor
+
 
 class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
     """MSRVTT-full dataset loader for multi-sentence
@@ -27,19 +28,19 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
     """
 
     def __init__(
-            self,
-            csv_path,
-            json_path,
-            features_path,
-            tokenizer,
-            max_words=30,
-            feature_framerate=1.0,
-            max_frames=100,
-            image_resolution=224,
-            subset='test',
+        self,
+        csv_path,
+        json_path,
+        features_path,
+        tokenizer,
+        max_words=30,
+        feature_framerate=1.0,
+        max_frames=100,
+        image_resolution=224,
+        subset="test",
     ):
         self.csv = pd.read_csv(csv_path)
-        self.data = json.load(open(json_path, 'r'))
+        self.data = json.load(open(json_path, "r"))
         self.features_path = features_path
         self.feature_framerate = feature_framerate
         self.max_words = max_words
@@ -48,41 +49,46 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
         self.subset = subset
 
         # load the id of split list
-        video_ids = list(self.csv['video_id'].values)
+        video_ids = list(self.csv["video_id"].values)
 
         # ensure the existing directory for training
         video_dict = {}
         for video_file in os.listdir(self.features_path):
             video_path = os.path.join(self.features_path, video_file)
-            if not os.path.isdir(video_path): continue
+            if not os.path.isdir(video_path):
+                continue
             if len(os.listdir(video_path)) > 5:
                 if video_file not in video_ids:
                     continue
                 video_dict[video_file] = video_path
 
-
         self.video_dict = video_dict
         self.sample_len = 0
         self.sentences_dict = {}
-        self.cut_off_points = [] # used to tag the label when calculate the metric
+        self.cut_off_points = []  # used to tag the label when calculate the metric
         pre_video_name = None
-        for item in self.data['sentences']:
-            if item['video_id'] in video_ids:
+        for item in self.data["sentences"]:
+            if item["video_id"] in video_ids:
                 if pre_video_name == None:
-                    pre_video_name = item['video_id']
-                elif pre_video_name != None and pre_video_name != item['video_id']:
-                    pre_video_name = item['video_id']
+                    pre_video_name = item["video_id"]
+                elif pre_video_name != None and pre_video_name != item["video_id"]:
+                    pre_video_name = item["video_id"]
                     self.cut_off_points.append(len(self.sentences_dict))
-                cap_txt = item['caption']
-                self.sentences_dict[len(self.sentences_dict)] = (item['video_id'], cap_txt)
+                cap_txt = item["caption"]
+                self.sentences_dict[len(self.sentences_dict)] = (
+                    item["video_id"],
+                    cap_txt,
+                )
         self.cut_off_points.append(len(self.sentences_dict))
 
         # usd for multi-sentence retrieval
         self.multi_sentence_per_video = True
 
         if self.subset == "val" or self.subset == "test":
-            self.sentence_num = len(self.sentences_dict) # used to cut the sentence representation
-            self.video_num = len(video_ids) # used to cut the video representation
+            self.sentence_num = len(
+                self.sentences_dict
+            )  # used to cut the sentence representation
+            self.video_num = len(video_ids)  # used to cut the video representation
             assert len(self.cut_off_points) == self.video_num
             print("For {}, sentence number: {}".format(self.subset, self.sentence_num))
             print("For {}, video number: {}".format(self.subset, self.video_num))
@@ -94,12 +100,18 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
         self.sample_len = len(self.sentences_dict)
 
         # frame extractor to sample frames from video
-        self.frameExtractor = RawFrameExtractor(framerate=feature_framerate, size=image_resolution, train=self.subset)
+        self.frameExtractor = RawFrameExtractor(
+            framerate=feature_framerate, size=image_resolution, train=self.subset
+        )
 
         # start and end token
-        self.SPECIAL_TOKEN = {"CLS_TOKEN": "<|startoftext|>", "SEP_TOKEN": "<|endoftext|>",
-                              "MASK_TOKEN": "[MASK]", "UNK_TOKEN": "[UNK]", "PAD_TOKEN": "[PAD]"}
-
+        self.SPECIAL_TOKEN = {
+            "CLS_TOKEN": "<|startoftext|>",
+            "SEP_TOKEN": "<|endoftext|>",
+            "MASK_TOKEN": "[MASK]",
+            "UNK_TOKEN": "[UNK]",
+            "PAD_TOKEN": "[PAD]",
+        }
 
     def __len__(self):
         """length of data loader
@@ -171,15 +183,24 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
         video_mask = np.zeros((1, self.max_frames), dtype=np.long)
 
         # 1 x L x 1 x 3 x H x W
-        video = np.zeros((1, self.max_frames, 1, 3,
-                          self.frameExtractor.size, self.frameExtractor.size), dtype=np.float)
+        video = np.zeros(
+            (
+                1,
+                self.max_frames,
+                1,
+                3,
+                self.frameExtractor.size,
+                self.frameExtractor.size,
+            ),
+            dtype=np.float,
+        )
 
         # video_path
         video_path = os.path.join(self.features_path, video_id)
 
         # get sampling frames
         raw_video_data = self.frameExtractor.get_video_data(video_path, self.max_frames)
-        raw_video_data = raw_video_data['video']
+        raw_video_data = raw_video_data["video"]
 
         # L x 1 x 3 x H x W
         if len(raw_video_data.shape) > 3:
@@ -189,7 +210,9 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
 
             # max_frames x 1 x 3 x H x W
             if self.max_frames < raw_video_slice.shape[0]:
-                sample_indx = np.linspace(0, raw_video_slice.shape[0] - 1, num=self.max_frames, dtype=int)
+                sample_indx = np.linspace(
+                    0, raw_video_slice.shape[0] - 1, num=self.max_frames, dtype=int
+                )
                 video_slice = raw_video_slice[sample_indx, ...]
             else:
                 video_slice = raw_video_slice
@@ -203,7 +226,6 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
             print("get raw video error, skip it.")
 
         return video, video_mask
-
 
     def __getitem__(self, idx):
         """forward method
@@ -222,8 +244,7 @@ class MSRVTTFULL_multi_sentence_dataLoader(Dataset):
         # obtain text data
         pairs_text, pairs_mask, pairs_segment = self._get_text(caption)
 
-        #obtain video data
+        # obtain video data
         video, video_mask = self._get_rawvideo(video_id)
 
         return pairs_text, pairs_mask, pairs_segment, video, video_mask
-
