@@ -13,14 +13,14 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from modules.until_module import PreTrainedModel
-from modules.until_module import CrossEn
+from .until_module import PreTrainedModel
+from .until_module import CrossEn
 
-from modules.module_cross import CrossConfig
-from modules.module_cross import Transformer as TransformerClip
+from .module_cross import CrossConfig
+from .module_cross import Transformer as TransformerClip
 
-from modules.module_clip import CLIP
-from modules.module_clip import convert_weights
+from .module_clip import CLIP
+from .module_clip import convert_weights
 
 # logging the parameters
 logger = logging.getLogger(__name__)
@@ -187,7 +187,8 @@ class CLIP2Video(CLIP2VideoPreTrainedModel):
             image_resolution, vision_layers-cut_top_layer, vision_width, vision_patch_size,
             context_length, vocab_size, transformer_width, transformer_heads, transformer_layers-cut_top_layer,
         ).float()
-        convert_weights(self.clip)
+        if torch.cuda.is_available():
+            convert_weights(self.clip)
 
         # set the type of similarity calculator
         self.sim_type = 'meanP'
