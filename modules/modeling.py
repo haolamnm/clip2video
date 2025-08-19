@@ -917,9 +917,12 @@ class CLIP2Video(CLIP2VideoPreTrainedModel):
             seq_indices = torch.cat(
                 (seq_indices, seq1_indices[i].view(1), seq2_indices[i].view(1))
             )
-        seq_indices = torch.cat(
-            (seq_indices, seq1_indices[seq_length - 1].view(1))
-        ).cuda()
+        if torch.cuda.is_available():
+            seq_indices = torch.cat(
+                (seq_indices, seq1_indices[seq_length - 1].view(1))
+            ).cuda()
+        else:
+            seq_indices = torch.cat((seq_indices, seq1_indices[seq_length - 1].view(1)))
 
         # insert difference-enhanced token between every adjacent frame token
         visual_output = visual_middle.index_select(1, seq_indices)
